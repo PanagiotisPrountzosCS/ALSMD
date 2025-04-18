@@ -5,8 +5,8 @@
 #include "ALSMD.h"
 
 LSM303 sensor(1, 1);
-i16vec3 magData;
-i16vec3 accelData;
+fvec3 magData;
+fvec3 accelData;
 
 void setup() {
     Serial.begin(115200);
@@ -22,8 +22,8 @@ void setup() {
 void loop() {
     delay(50);
 
-    sensor.readRawMag(magData);
-    sensor.readRawAccel(accelData);
+    sensor.readMag(magData);
+    sensor.readAccel(accelData);
 
     // Serial.print("aX = ");
     // Serial.print(accelData.x);

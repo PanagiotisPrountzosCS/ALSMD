@@ -11,6 +11,12 @@ typedef struct {
     int16_t z;
 } i16vec3;
 
+typedef struct {
+    float x;
+    float y;
+    float z;
+} fvec3;
+
 // LSM303 Accelerometer Registers
 enum AccelRegisters {
     CTRL_REG1_A = 0x20,      // Control register 1
@@ -96,6 +102,37 @@ enum DataRate {
     RATE_COUNT
 };
 
+enum AccelPowerMode { ACCEL_MODE_NORMAL = 0, ACCEL_MODE_LOW_POWER = 1, ACCEL_MODE_POWERDOWN = 2 };
+
+enum MagPowerMode { MAG_MODE_CONTINUOUS = 0, MAG_MODE_SINGLE = 1, MAG_MODE_SLEEP = 2 };
+
+enum AccelSensitivity {
+    ACCEL_SENSITIVITY_2G = 1,
+    ACCEL_SENSITIVITY_4G = 2,
+    ACCEL_SENSITIVITY_8G = 4,
+    ACCEL_SENSITIVITY_16G = 12
+};
+
+enum MagSensitivityXY {
+    MAG_SENSITIVITY_XY_1_3 = 1100,
+    MAG_SENSITIVITY_XY_1_9 = 855,
+    MAG_SENSITIVITY_XY_2_5 = 670,
+    MAG_SENSITIVITY_XY_4_0 = 450,
+    MAG_SENSITIVITY_XY_4_7 = 400,
+    MAG_SENSITIVITY_XY_5_6 = 330,
+    MAG_SENSITIVITY_XY_8_1 = 230
+};
+
+enum MagSensitivityZ {
+    MAG_SENSITIVITY_Z_1_3 = 980,
+    MAG_SENSITIVITY_Z_1_9 = 760,
+    MAG_SENSITIVITY_Z_2_5 = 600,
+    MAG_SENSITIVITY_Z_4_0 = 400,
+    MAG_SENSITIVITY_Z_4_7 = 355,
+    MAG_SENSITIVITY_Z_5_6 = 295,
+    MAG_SENSITIVITY_Z_8_1 = 205
+};
+
 class LSM303 {
 public:
     LSM303(bool magEnable, bool accelEnable, uint8_t accelAddr = 0x19, uint8_t magAddr = 0x1E) {
@@ -103,7 +140,11 @@ public:
         _accelEnable = accelEnable;
         _accelAddress = accelAddr;
         _magAddress = magAddr;
-    }  // Default I2C addresses
+        _accelRate = RATE_15HZ;
+        _magRate = RATE_15HZ;
+        _accelPowerMode = ACCEL_MODE_NORMAL;
+        _magPowerMode = MAG_MODE_CONTINUOUS;
+    }
 
     bool checkI2CCommunication() {
         // just confirm we can begin and end transmission to the i2c slaves
@@ -130,27 +171,32 @@ public:
         // confirm I2C communication
         if (!checkI2CCommunication()) return false;
 
-        // initialize the accelerometer's and the magnetometer's control registers
-        // 0x57 in register 0x20 means 100Hz normal power mode and xyz enabled
-        writeByte(_accelAddress, CTRL_REG1_A, 0x57);
+        if (_accelEnable) {
+            _accelScale = ACCEL_SCALE_2G;
+            setAccelPowerMode(ACCEL_MODE_NORMAL);
+            setAccelDataRate(RATE_15HZ);
+            setAccelScale(_accelScale);
+        }
 
-        // high resolution disabled + 2g accelerometer range
-        _accelScale = ACCEL_SCALE_16G;
-        writeByte(_accelAddress, CTRL_REG4_A, _accelScale << 4);
-
-        // this controls the rate at which data is written in the output registers
-        writeByte(_magAddress, CRA_REG_M, 0x10);
-
-        _magScale = MAG_SCALE_8_1;
-        writeByte(_magAddress, CRB_REG_M, _magScale << 5);
-
-        // set magnetometer in continuous conversion mode
-        writeByte(_magAddress, MR_REG_M, 0x00);
-
+        if (_magEnable) {
+            _magScale = MAG_SCALE_8_1;
+            setMagPowerMode(MAG_MODE_CONTINUOUS);
+            setMagDataRate(RATE_15HZ);
+            setMagScale(_magScale);
+        }
         return true;
     }
 
+    void enableMag() { _magEnable = true; }
+
+    void enableAccel() { _accelEnable = true; }
+
+    void disableMag() { _magEnable = false; }
+
+    void disableAccel() { _accelEnable = false; }
+
     void readRawAccel(i16vec3& vec) {
+        if (!_accelEnable) return;
         uint8_t buffer[6];
         // each value is 2 bytes, so we stack allocate 6 as a buffer
 
@@ -164,13 +210,136 @@ public:
     }
 
     void readRawMag(i16vec3& vec) {
+        if (!_magEnable) return;
         uint8_t buffer[6];
 
-        readByteArray(_magAddress, OUT_X_L_M, buffer, 6);
+        readByteArray(_magAddress, OUT_X_H_M, buffer, 6);
 
-        vec.x = (int16_t)((buffer[1] << 8) | buffer[0]);
-        vec.y = (int16_t)((buffer[5] << 8) | buffer[4]);
-        vec.z = (int16_t)((buffer[3] << 8) | buffer[2]);
+        vec.x = (int16_t)((buffer[0] << 8) | buffer[1]);
+        vec.y = (int16_t)((buffer[4] << 8) | buffer[5]);
+        vec.z = (int16_t)((buffer[2] << 8) | buffer[3]);
+    }
+
+    void readAccel(fvec3& vec) {
+        i16vec3 temp{0, 0, 0};
+        readRawAccel(temp);
+        processAccelData(vec, temp);
+    }
+
+    void readMag(fvec3& vec) {
+        i16vec3 temp{0, 0, 0};
+        readRawMag(temp);
+        processMagData(vec, temp);
+    }
+
+    void processAccelData(fvec3& out, const i16vec3 in) {
+        // sensitivity switch
+        switch (_accelScale) {
+            case ACCEL_SCALE_2G:
+                out.x = in.x;
+                out.y = in.y;
+                out.z = in.z;
+                break;
+            case ACCEL_SCALE_4G:
+                out.x = ACCEL_SENSITIVITY_4G * in.x;
+                out.y = ACCEL_SENSITIVITY_4G * in.y;
+                out.z = ACCEL_SENSITIVITY_4G * in.z;
+                break;
+            case ACCEL_SCALE_8G:
+                out.x = ACCEL_SENSITIVITY_8G * in.x;
+                out.y = ACCEL_SENSITIVITY_8G * in.y;
+                out.z = ACCEL_SENSITIVITY_8G * in.z;
+                break;
+            case ACCEL_SCALE_16G:
+                out.x = ACCEL_SENSITIVITY_16G * in.x;
+                out.y = ACCEL_SENSITIVITY_16G * in.y;
+                out.z = ACCEL_SENSITIVITY_16G * in.z;
+                break;
+            default:
+                out.x = 0;
+                out.y = 0;
+                out.z = 0;
+        }
+        // mg to g
+        out.x /= 1000;
+        out.y /= 1000;
+        out.z /= 1000;
+    }
+
+    void processMagData(fvec3& out, const i16vec3 in) {
+        switch (_magScale) {
+            case MAG_SCALE_1_3:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_1_3);
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_1_3);
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_1_3);
+                break;
+
+            case MAG_SCALE_1_9:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_1_9);
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_1_9);
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_1_9);
+                break;
+
+            case MAG_SCALE_2_5:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_2_5);
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_2_5);
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_2_5);
+                break;
+
+            case MAG_SCALE_4_0:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_4_0);
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_4_0);
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_4_0);
+                break;
+
+            case MAG_SCALE_4_7:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_4_7);
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_4_7);
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_4_7);
+                break;
+
+            case MAG_SCALE_5_6:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_5_6);
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_5_6);
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_5_6);
+                break;
+
+            case MAG_SCALE_8_1:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_8_1);
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_8_1);
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_8_1);
+                break;
+
+            default:
+                out.x = 0;
+                out.y = 0;
+                out.z = 0;
+                break;
+        }
+        out.x *= 100.0f;
+        out.y *= 100.0f;
+        out.z *= 100.0f;
+    }
+
+    void setAccelDataRate(uint8_t rate) {
+        if (rate >= RATE_COUNT) return;
+        _accelRate = rate;
+
+        // Read current register value to preserve other bits
+        uint8_t current = readByte(_accelAddress, CTRL_REG1_A);
+
+        // Clear the data rate bits (bits 4-7)
+        current &= 0x0F;
+
+        // Set new data rate bits (shifted to position)
+        current |= (rate << 4);
+
+        // Add power mode bit if needed
+        if (_accelPowerMode == ACCEL_MODE_LOW_POWER)
+            current |= 0x08;  // Set bit 3 for low power mode
+
+        // Write back to register
+        writeByte(_accelAddress, CTRL_REG1_A, current);
     }
 
     void setAccelScale(uint8_t newScale) {
@@ -191,6 +360,50 @@ public:
         writeByte(_accelAddress, CTRL_REG4_A, current);
     }
 
+    void setAccelPowerMode(uint8_t mode) {
+        if (mode > ACCEL_MODE_POWERDOWN) return;
+        _accelPowerMode = mode;
+
+        uint8_t current = readByte(_accelAddress, CTRL_REG1_A);
+
+        switch (mode) {
+            case ACCEL_MODE_NORMAL:
+                // Clear low power bit, ensure axes are enabled
+                current &= ~0x08;  // Clear bit 3
+                current |= 0x07;   // Set bits 0-2 (XYZ axes enabled)
+                break;
+
+            case ACCEL_MODE_LOW_POWER:
+                // Set low power bit, ensure axes are enabled
+                current |= 0x08;  // Set bit 3
+                current |= 0x07;  // Set bits 0-2 (XYZ axes enabled)
+                break;
+
+            case ACCEL_MODE_POWERDOWN:
+                // Clear axes enable bits to power down
+                current &= ~0x07;  // Clear bits 0-2
+                break;
+        }
+
+        writeByte(_accelAddress, CTRL_REG1_A, current);
+    }
+
+    void setMagDataRate(uint8_t rate) {
+        if (rate >= RATE_COUNT) return;
+        _magRate = rate;
+
+        uint8_t current = readByte(_magAddress, CRA_REG_M);
+
+        // Clear the data rate bits
+        current &= 0xE3;  // 11100011 - Clear bits 2-4
+
+        // Set new data rate bits
+        current |= (rate << 2);
+
+        // Write back to register
+        writeByte(_magAddress, CRA_REG_M, current);
+    }
+
     void setMagScale(uint8_t newScale) {
         if (newScale != _magScale && newScale <= 7)
             _magScale = newScale;
@@ -200,6 +413,32 @@ public:
         // Write the gain setting to CRB_REG_M
         // The gain bits are in bits 5-7
         writeByte(_magAddress, CRB_REG_M, newScale << 5);
+    }
+
+    void setMagPowerMode(uint8_t mode) {
+        if (mode > MAG_MODE_SLEEP) return;
+        _magPowerMode = mode;
+
+        uint8_t regValue;
+
+        switch (mode) {
+            case MAG_MODE_CONTINUOUS:
+                regValue = 0x00;
+                break;
+
+            case MAG_MODE_SINGLE:
+                regValue = 0x01;
+                break;
+
+            case MAG_MODE_SLEEP:
+                regValue = 0x02;
+                break;
+
+            default:
+                return;
+        }
+
+        writeByte(_magAddress, MR_REG_M, regValue);
     }
 
 private:
@@ -242,6 +481,8 @@ private:
     // Module states
     bool _magEnable;
     bool _accelEnable;
+    uint8_t _accelPowerMode;
+    uint8_t _magPowerMode;
 };
 
 #endif
