@@ -98,13 +98,15 @@ enum DataRate {
 
 class LSM303 {
 public:
-    LSM303(uint8_t accelAddr = 0x19, uint8_t magAddr = 0x1E) {
+    LSM303(bool magEnable, bool accelEnable, uint8_t accelAddr = 0x19, uint8_t magAddr = 0x1E) {
+        _magEnable = magEnable;
+        _accelEnable = accelEnable;
         _accelAddress = accelAddr;
         _magAddress = magAddr;
     }  // Default I2C addresses
 
-    bool init() {
-        // just confirm we can communicate with the i2c slaves
+    bool checkI2CCommunication() {
+        // just confirm we can begin and end transmission to the i2c slaves
         Wire.beginTransmission(_accelAddress);
         byte accelStatus = Wire.endTransmission();
         if (accelStatus != 0) {
@@ -121,7 +123,29 @@ public:
             return false;
         }
 
-        // set some power / frequency modes here
+        return true;
+    }
+
+    bool defaultInit() {
+        // confirm I2C communication
+        if (!checkI2CCommunication()) return false;
+
+        // initialize the accelerometer's and the magnetometer's control registers
+        // 0x57 in register 0x20 means 100Hz normal power mode and xyz enabled
+        writeByte(_accelAddress, CTRL_REG1_A, 0x57);
+
+        // high resolution disabled + 2g accelerometer range
+        _accelScale = ACCEL_SCALE_16G;
+        writeByte(_accelAddress, CTRL_REG4_A, _accelScale << 4);
+
+        // this controls the rate at which data is written in the output registers
+        writeByte(_magAddress, CRA_REG_M, 0x10);
+
+        _magScale = MAG_SCALE_8_1;
+        writeByte(_magAddress, CRB_REG_M, _magScale << 5);
+
+        // set magnetometer in continuous conversion mode
+        writeByte(_magAddress, MR_REG_M, 0x00);
 
         return true;
     }
@@ -133,9 +157,10 @@ public:
         // read all 6
         readByteArray(_accelAddress, OUT_X_L_A, buffer, 6);
 
-        vec.x = (int16_t)((buffer[1] << 8) | buffer[0]);
-        vec.y = (int16_t)((buffer[3] << 8) | buffer[2]);
-        vec.z = (int16_t)((buffer[5] << 8) | buffer[4]);
+        vec.x = (int16_t)((buffer[1] << 8) | buffer[0]) >> 4;
+        vec.y = (int16_t)((buffer[3] << 8) | buffer[2]) >> 4;
+        vec.z = (int16_t)((buffer[5] << 8) | buffer[4]) >> 4;
+        // right bit shift might be variable
     }
 
     void readRawMag(i16vec3& vec) {
@@ -213,6 +238,10 @@ private:
     uint8_t _magScale;
     uint8_t _accelRate;
     uint8_t _magRate;
+
+    // Module states
+    bool _magEnable;
+    bool _accelEnable;
 };
 
 #endif
