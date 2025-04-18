@@ -5,14 +5,12 @@
 #include "ALSMD.h"
 
 LSM303 sensor;
-int16_t aX;
-int16_t aY;
-int16_t aZ;
-int16_t mX;
-int16_t mY;
-int16_t mZ;
+i16vec3 magData;
+i16vec3 accelData;
 
 void setup() {
+    Serial.begin(115200);
+    Wire.begin();
     if (!sensor.init()) {
         Serial.println("Failed to initialize LSM303!");
         while (1) {
@@ -22,21 +20,21 @@ void setup() {
 }
 
 void loop() {
-    sleep(500);
+    delay(500);
 
-    sensor.readAccel(&aX, &aY, &aZ);
-    sensor.readAccel(&mX, &mY, &mZ);
+    sensor.readRawMag(magData);
+    sensor.readRawAccel(accelData);
 
     Serial.print("aX = ");
-    Serial.println(aX);
-    Serial.print("aY = ");
-    Serial.println(aY);
-    Serial.print("aZ = ");
-    Serial.println(aZ);
+    Serial.print(accelData.x);
+    Serial.print(", aY = ");
+    Serial.print(accelData.y);
+    Serial.print(", aZ = ");
+    Serial.println(accelData.z);
     Serial.print("mX = ");
-    Serial.println(mX);
-    Serial.print("mY = ");
-    Serial.println(mY);
-    Serial.print("mZ = ");
-    Serial.println(mZ);
+    Serial.print(magData.x);
+    Serial.print(", mY = ");
+    Serial.print(magData.y);
+    Serial.print(", mZ = ");
+    Serial.println(magData.z);
 }

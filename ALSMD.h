@@ -3,24 +3,85 @@
 
 #include <Wire.h>
 
-// Constants for configuration
-enum AccelRange {
-    ACCEL_RANGE_2G = 0,
-    ACCEL_RANGE_4G,
-    ACCEL_RANGE_8G,
-    ACCEL_RANGE_16G,
-    ACCEL_RANGE_COUNT
+typedef uint8_t byte;
+
+typedef struct {
+    int16_t x;
+    int16_t y;
+    int16_t z;
+} i16vec3;
+
+// LSM303 Accelerometer Registers
+enum AccelRegisters {
+    CTRL_REG1_A = 0x20,      // Control register 1
+    CTRL_REG2_A = 0x21,      // Control register 2
+    CTRL_REG3_A = 0x22,      // Control register 3
+    CTRL_REG4_A = 0x23,      // Control register 4
+    CTRL_REG5_A = 0x24,      // Control register 5
+    CTRL_REG6_A = 0x25,      // Control register 6
+    REFERENCE_A = 0x26,      // Reference/datacapture
+    STATUS_REG_A = 0x27,     // Status register
+    OUT_X_L_A = 0x28,        // X-axis acceleration data low byte
+    OUT_X_H_A = 0x29,        // X-axis acceleration data high byte
+    OUT_Y_L_A = 0x2A,        // Y-axis acceleration data low byte
+    OUT_Y_H_A = 0x2B,        // Y-axis acceleration data high byte
+    OUT_Z_L_A = 0x2C,        // Z-axis acceleration data low byte
+    OUT_Z_H_A = 0x2D,        // Z-axis acceleration data high byte
+    FIFO_CTRL_REG_A = 0x2E,  // FIFO control register
+    FIFO_SRC_REG_A = 0x2F,   // FIFO source register
+    INT1_CFG_A = 0x30,       // Interrupt 1 configuration
+    INT1_SRC_A = 0x31,       // Interrupt 1 source
+    INT1_THS_A = 0x32,       // Interrupt 1 threshold
+    INT1_DURATION_A = 0x33,  // Interrupt 1 duration
+    INT2_CFG_A = 0x34,       // Interrupt 2 configuration
+    INT2_SRC_A = 0x35,       // Interrupt 2 source
+    INT2_THS_A = 0x36,       // Interrupt 2 threshold
+    INT2_DURATION_A = 0x37,  // Interrupt 2 duration
+    CLICK_CFG_A = 0x38,      // Click configuration
+    CLICK_SRC_A = 0x39,      // Click source
+    CLICK_THS_A = 0x3A,      // Click threshold
+    TIME_LIMIT_A = 0x3B,     // Time limit
+    TIME_LATENCY_A = 0x3C,   // Time latency
+    TIME_WINDOW_A = 0x3D     // Time window
 };
 
-enum MagGain {
-    MAG_GAIN_1_3 = 0,  // ±1.3 gauss
-    MAG_GAIN_1_9,      // ±1.9 gauss
-    MAG_GAIN_2_5,      // ±2.5 gauss
-    MAG_GAIN_4_0,      // ±4.0 gauss
-    MAG_GAIN_4_7,      // ±4.7 gauss
-    MAG_GAIN_5_6,      // ±5.6 gauss
-    MAG_GAIN_8_1,      // ±8.1 gauss
-    MAG_GAIN_COUNT
+// LSM303 Magnetometer Registers
+enum MagRegisters {
+    CRA_REG_M = 0x00,     // Configuration register A
+    CRB_REG_M = 0x01,     // Configuration register B
+    MR_REG_M = 0x02,      // Mode register
+    OUT_X_H_M = 0x03,     // X-axis magnetic data high byte
+    OUT_X_L_M = 0x04,     // X-axis magnetic data low byte
+    OUT_Z_H_M = 0x05,     // Z-axis magnetic data high byte (Note: Z before Y in register map)
+    OUT_Z_L_M = 0x06,     // Z-axis magnetic data low byte
+    OUT_Y_H_M = 0x07,     // Y-axis magnetic data high byte
+    OUT_Y_L_M = 0x08,     // Y-axis magnetic data low byte
+    SR_REG_M = 0x09,      // Status register
+    IRA_REG_M = 0x0A,     // Identification register A
+    IRB_REG_M = 0x0B,     // Identification register B
+    IRC_REG_M = 0x0C,     // Identification register C
+    TEMP_OUT_H_M = 0x31,  // Temperature data high byte (DLHC/DLM only)
+    TEMP_OUT_L_M = 0x32   // Temperature data low byte (DLHC/DLM only)
+};
+
+// Constants for configuration
+enum AccelScale {
+    ACCEL_SCALE_2G = 0,
+    ACCEL_SCALE_4G,
+    ACCEL_SCALE_8G,
+    ACCEL_SCALE_16G,
+    ACCEL_SCALE_COUNT
+};
+
+enum MagScale {
+    // this enum needs to start from 1 because the GN bits start from 001 for a gain of 1.3 :(
+    MAG_SCALE_1_3 = 1,  // ±1.3 gauss
+    MAG_SCALE_1_9,      // ±1.9 gauss
+    MAG_SCALE_2_5,      // ±2.5 gauss
+    MAG_SCALE_4_0,      // ±4.0 gauss
+    MAG_SCALE_4_7,      // ±4.7 gauss
+    MAG_SCALE_5_6,      // ±5.6 gauss
+    MAG_SCALE_8_1       // ±8.1 gauss
 };
 
 enum DataRate {
@@ -37,65 +98,121 @@ enum DataRate {
 
 class LSM303 {
 public:
-    LSM303(uint8_t accelAddr = 0x19, uint8_t magAddr = 0x1E);  // Default I2C addresses
+    LSM303(uint8_t accelAddr = 0x19, uint8_t magAddr = 0x1E) {
+        _accelAddress = accelAddr;
+        _magAddress = magAddr;
+    }  // Default I2C addresses
 
-    bool init();
+    bool init() {
+        // just confirm we can communicate with the i2c slaves
+        Wire.beginTransmission(_accelAddress);
+        byte accelStatus = Wire.endTransmission();
+        if (accelStatus != 0) {
+            Serial.print("Accel fail. Error code : ");
+            Serial.println(accelStatus);
+            return false;
+        }
 
-    bool setAccelRange(uint8_t range);
-    bool setMagGain(uint8_t gain);
-    bool setAccelDataRate(uint8_t rate);
-    bool setMagDataRate(uint8_t rate);
+        Wire.beginTransmission(_magAddress);
+        byte magStatus = Wire.endTransmission();
+        if (magStatus != 0) {
+            Serial.print("Mag fail. Error code : ");
+            Serial.println(magStatus);
+            return false;
+        }
 
-    bool enableAccel(bool enable = true);
-    bool enableMag(bool enable = true);
-    bool sleep();
-    bool wake();
+        // set some power / frequency modes here
 
-    int16_t readAccelX();
-    int16_t readAccelY();
-    int16_t readAccelZ();
-    int16_t readMagX();
-    int16_t readMagY();
-    int16_t readMagZ();
+        return true;
+    }
 
-    bool readAccel(int16_t* x, int16_t* y, int16_t* z);
-    bool readMag(int16_t* x, int16_t* y, int16_t* z);
+    void readRawAccel(i16vec3& vec) {
+        uint8_t buffer[6];
+        // each value is 2 bytes, so we stack allocate 6 as a buffer
 
-    void calibrateAccel();
-    void calibrateMag();
-    void setAccelBias(int16_t x, int16_t y, int16_t z);
-    void setMagBias(int16_t x, int16_t y, int16_t z);
-    void setMagScale(float x, float y, float z);
+        // read all 6
+        readByteArray(_accelAddress, OUT_X_L_A, buffer, 6);
 
-    float getHeading();
-    float getTiltCompensatedHeading();
-    float getTemperature();
+        vec.x = (int16_t)((buffer[1] << 8) | buffer[0]);
+        vec.y = (int16_t)((buffer[3] << 8) | buffer[2]);
+        vec.z = (int16_t)((buffer[5] << 8) | buffer[4]);
+    }
+
+    void readRawMag(i16vec3& vec) {
+        uint8_t buffer[6];
+
+        readByteArray(_magAddress, OUT_X_L_M, buffer, 6);
+
+        vec.x = (int16_t)((buffer[1] << 8) | buffer[0]);
+        vec.y = (int16_t)((buffer[5] << 8) | buffer[4]);
+        vec.z = (int16_t)((buffer[3] << 8) | buffer[2]);
+    }
+
+    void setAccelScale(uint8_t newScale) {
+        if (newScale != _accelScale && newScale < ACCEL_SCALE_COUNT)
+            _accelScale = newScale;
+        else
+            return;
+        // Read current register value
+        uint8_t current = readByte(_accelAddress, CTRL_REG4_A);
+
+        // Keep other control flags
+        current &= 0b11001111;
+
+        // Set the new scale bits
+        current |= (newScale << 4);
+
+        // Rewrite control register 4
+        writeByte(_accelAddress, CTRL_REG4_A, current);
+    }
+
+    void setMagScale(uint8_t newScale) {
+        if (newScale != _magScale && newScale <= 7)
+            _magScale = newScale;
+        else
+            return;
+
+        // Write the gain setting to CRB_REG_M
+        // The gain bits are in bits 5-7
+        writeByte(_magAddress, CRB_REG_M, newScale << 5);
+    }
 
 private:
-    // I2C addresses (may vary by exact chip variant)
+    void writeByte(byte dev_addr, byte reg_addr, byte data) {
+        Wire.beginTransmission(dev_addr);
+        Wire.write(reg_addr);
+        Wire.write(data);
+        Wire.endTransmission();
+    }
+
+    byte readByte(byte dev_addr, byte reg_addr) {
+        Wire.beginTransmission(dev_addr);
+        Wire.write(reg_addr);
+        Wire.endTransmission(false);
+
+        Wire.requestFrom(dev_addr, 1);
+        return Wire.read();
+    }
+
+    void readByteArray(byte dev_addr, byte reg_addr, byte* buf, byte count) {
+        Wire.beginTransmission(dev_addr);
+        Wire.write(reg_addr | 0x80);  // read register auto increment flag
+        Wire.endTransmission(false);
+
+        Wire.requestFrom(dev_addr, count);
+        for (uint8_t i = 0; i < count && Wire.available(); i++) {
+            buf[i] = Wire.read();
+        }
+    }
+    // I2C addresses
     uint8_t _accelAddress;
     uint8_t _magAddress;
 
     // Configuration state
-    uint8_t _accelScale;  // Current accelerometer range setting
-    uint8_t _magGain;     // Current magnetometer gain setting
-    uint8_t _accelRate;   // Current accelerometer sampling rate
-    uint8_t _magRate;     // Current magnetometer sampling rate
-    bool _accelEnabled;   // Is accelerometer currently enabled?
-    bool _magEnabled;     // Is magnetometer currently enabled?
-
-    // Calibration values
-    int16_t _accelBias[3];  // Offsets for x, y, z
-    int16_t _magBias[3];    // Offsets for x, y, z
-    float _magScale[3];     // Scale factors for x, y, z
-
-    // Helper methods for I2C communication
-    bool writeAccelReg(uint8_t reg, uint8_t value);
-    bool writeMagReg(uint8_t reg, uint8_t value);
-    uint8_t readAccelReg(uint8_t reg);
-    uint8_t readMagReg(uint8_t reg);
-    bool readAccelRegs(uint8_t reg, uint8_t* buffer, uint8_t len);
-    bool readMagRegs(uint8_t reg, uint8_t* buffer, uint8_t len);
+    uint8_t _accelScale;
+    uint8_t _magScale;
+    uint8_t _accelRate;
+    uint8_t _magRate;
 };
 
-#endif _ALSMD_H
+#endif
