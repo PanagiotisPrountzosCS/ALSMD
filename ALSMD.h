@@ -11,6 +11,12 @@ typedef struct {
     int16_t z;
 } i16vec3;
 
+typedef struct {
+    float x;
+    float y;
+    float z;
+} fvec3;
+
 // LSM303 Accelerometer Registers
 enum AccelRegisters {
     CTRL_REG1_A = 0x20,      // Control register 1
@@ -96,15 +102,44 @@ enum DataRate {
     RATE_COUNT
 };
 
+enum AccelSensitivity {
+    ACCEL_SENSITIVITY_2G = 1,
+    ACCEL_SENSITIVITY_4G = 2,
+    ACCEL_SENSITIVITY_8G = 4,
+    ACCEL_SENSITIVITY_16G = 12
+};
+
+enum MagSensitivityXY {
+    MAG_SENSITIVITY_XY_1_3 = 1100,
+    MAG_SENSITIVITY_XY_1_9 = 855,
+    MAG_SENSITIVITY_XY_2_5 = 670,
+    MAG_SENSITIVITY_XY_4_0 = 450,
+    MAG_SENSITIVITY_XY_4_7 = 400,
+    MAG_SENSITIVITY_XY_5_6 = 330,
+    MAG_SENSITIVITY_XY_8_1 = 230
+};
+
+enum MagSensitivityZ {
+    MAG_SENSITIVITY_Z_1_3 = 980,
+    MAG_SENSITIVITY_Z_1_9 = 760,
+    MAG_SENSITIVITY_Z_2_5 = 600,
+    MAG_SENSITIVITY_Z_4_0 = 400,
+    MAG_SENSITIVITY_Z_4_7 = 355,
+    MAG_SENSITIVITY_Z_5_6 = 295,
+    MAG_SENSITIVITY_Z_8_1 = 205
+};
+
 class LSM303 {
 public:
-    LSM303(uint8_t accelAddr = 0x19, uint8_t magAddr = 0x1E) {
+    LSM303(bool magEnable, bool accelEnable, uint8_t accelAddr = 0x19, uint8_t magAddr = 0x1E) {
+        _magEnable = magEnable;
+        _accelEnable = accelEnable;
         _accelAddress = accelAddr;
         _magAddress = magAddr;
     }  // Default I2C addresses
 
-    bool init() {
-        // just confirm we can communicate with the i2c slaves
+    bool checkI2CCommunication() {
+        // just confirm we can begin and end transmission to the i2c slaves
         Wire.beginTransmission(_accelAddress);
         byte accelStatus = Wire.endTransmission();
         if (accelStatus != 0) {
@@ -121,24 +156,60 @@ public:
             return false;
         }
 
-        // set some power / frequency modes here
-
         return true;
     }
 
+    bool defaultInit() {
+        // confirm I2C communication
+        if (!checkI2CCommunication()) return false;
+
+        if (_accelEnable) {
+            // initialize the accelerometer's and the magnetometer's control registers
+            // 0x57 in register 0x20 means 100Hz normal power mode and xyz enabled
+            writeByte(_accelAddress, CTRL_REG1_A, 0x57);
+
+            // high resolution disabled + 2g accelerometer range
+            _accelScale = ACCEL_SCALE_2G;
+            writeByte(_accelAddress, CTRL_REG4_A, _accelScale << 4);
+        }
+
+        if (_magEnable) {
+            // this controls the rate at which data is written in the output registers
+            writeByte(_magAddress, CRA_REG_M, 0x10);
+
+            _magScale = MAG_SCALE_8_1;
+            writeByte(_magAddress, CRB_REG_M, _magScale << 5);
+
+            // set magnetometer in continuous conversion mode
+            writeByte(_magAddress, MR_REG_M, 0x00);
+        }
+        return true;
+    }
+
+    void enableMag() { _magEnable = true; }
+
+    void enableAccel() { _accelEnable = true; }
+
+    void disableMag() { _magEnable = false; }
+
+    void disableAccel() { _accelEnable = false; }
+
     void readRawAccel(i16vec3& vec) {
+        if (!_accelEnable) return;
         uint8_t buffer[6];
         // each value is 2 bytes, so we stack allocate 6 as a buffer
 
         // read all 6
         readByteArray(_accelAddress, OUT_X_L_A, buffer, 6);
 
-        vec.x = (int16_t)((buffer[1] << 8) | buffer[0]);
-        vec.y = (int16_t)((buffer[3] << 8) | buffer[2]);
-        vec.z = (int16_t)((buffer[5] << 8) | buffer[4]);
+        vec.x = (int16_t)((buffer[1] << 8) | buffer[0]) >> 4;
+        vec.y = (int16_t)((buffer[3] << 8) | buffer[2]) >> 4;
+        vec.z = (int16_t)((buffer[5] << 8) | buffer[4]) >> 4;
+        // right bit shift might be variable
     }
 
     void readRawMag(i16vec3& vec) {
+        if (!_magEnable) return;
         uint8_t buffer[6];
 
         readByteArray(_magAddress, OUT_X_L_M, buffer, 6);
@@ -146,6 +217,104 @@ public:
         vec.x = (int16_t)((buffer[1] << 8) | buffer[0]);
         vec.y = (int16_t)((buffer[5] << 8) | buffer[4]);
         vec.z = (int16_t)((buffer[3] << 8) | buffer[2]);
+    }
+
+    void readAccel(fvec3& vec) {
+        i16vec3 temp;
+        readRawAccel(temp);
+        processAccelData(vec, temp);
+    }
+
+    void readMag(fvec3& vec) {
+        i16vec3 temp;
+        readRawMag(temp);
+        processMagData(vec, temp);
+    }
+
+    void processAccelData(fvec3& out, const i16vec3 in) {
+        // sensitivity switch
+        switch (_accelScale) {
+            case ACCEL_SCALE_2G:
+                out.x = in.x;
+                out.y = in.y;
+                out.z = in.z;
+                break;
+            case ACCEL_SCALE_4G:
+                out.x = ACCEL_SENSITIVITY_4G * in.x;
+                out.y = ACCEL_SENSITIVITY_4G * in.y;
+                out.z = ACCEL_SENSITIVITY_4G * in.z;
+                break;
+            case ACCEL_SCALE_8G:
+                out.x = ACCEL_SENSITIVITY_8G * in.x;
+                out.y = ACCEL_SENSITIVITY_8G * in.y;
+                out.z = ACCEL_SENSITIVITY_8G * in.z;
+                break;
+            case ACCEL_SCALE_16G:
+                out.x = ACCEL_SENSITIVITY_16G * in.x;
+                out.y = ACCEL_SENSITIVITY_16G * in.y;
+                out.z = ACCEL_SENSITIVITY_16G * in.z;
+                break;
+            default:
+                out.x = 0;
+                out.y = 0;
+                out.z = 0;
+        }
+        // mg to g
+        out.x /= 1000;
+        out.y /= 1000;
+        out.z /= 1000;
+    }
+
+    void processMagData(fvec3& out, const i16vec3 in) {
+        switch (_magScale) {
+            case MAG_SCALE_1_3:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_1_3) * 100.0f;
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_1_3) * 100.0f;
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_1_3) * 100.0f;
+                break;
+
+            case MAG_SCALE_1_9:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_1_9) * 100.0f;
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_1_9) * 100.0f;
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_1_9) * 100.0f;
+                break;
+
+            case MAG_SCALE_2_5:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_2_5) * 100.0f;
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_2_5) * 100.0f;
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_2_5) * 100.0f;
+                break;
+
+            case MAG_SCALE_4_0:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_4_0) * 100.0f;
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_4_0) * 100.0f;
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_4_0) * 100.0f;
+                break;
+
+            case MAG_SCALE_4_7:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_4_7) * 100.0f;
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_4_7) * 100.0f;
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_4_7) * 100.0f;
+                break;
+
+            case MAG_SCALE_5_6:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_5_6) * 100.0f;
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_5_6) * 100.0f;
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_5_6) * 100.0f;
+                break;
+
+            case MAG_SCALE_8_1:
+                out.x = (in.x / (float)MAG_SENSITIVITY_XY_8_1) * 100.0f;
+                out.y = (in.y / (float)MAG_SENSITIVITY_XY_8_1) * 100.0f;
+                out.z = (in.z / (float)MAG_SENSITIVITY_Z_8_1) * 100.0f;
+                break;
+
+            default:
+                out.x = 0;
+                out.y = 0;
+                out.z = 0;
+                break;
+        }
     }
 
     void setAccelScale(uint8_t newScale) {
@@ -213,6 +382,10 @@ private:
     uint8_t _magScale;
     uint8_t _accelRate;
     uint8_t _magRate;
+
+    // Module states
+    bool _magEnable;
+    bool _accelEnable;
 };
 
 #endif
