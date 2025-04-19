@@ -58,7 +58,7 @@ enum MagRegisters {
     MR_REG_M = 0x02,      // Mode register
     OUT_X_H_M = 0x03,     // X-axis magnetic data high byte
     OUT_X_L_M = 0x04,     // X-axis magnetic data low byte
-    OUT_Z_H_M = 0x05,     // Z-axis magnetic data high byte (Note: Z before Y in register map)
+    OUT_Z_H_M = 0x05,     // Z-axis magnetic data high byte
     OUT_Z_L_M = 0x06,     // Z-axis magnetic data low byte
     OUT_Y_H_M = 0x07,     // Y-axis magnetic data high byte
     OUT_Y_L_M = 0x08,     // Y-axis magnetic data low byte
@@ -361,7 +361,7 @@ public:
     }
 
     void setAccelPowerMode(uint8_t mode) {
-        if (mode > ACCEL_MODE_POWERDOWN) return;
+        if (mode > ACCEL_MODE_POWERDOWN || mode == _accelPowerMode) return;
         _accelPowerMode = mode;
 
         uint8_t current = readByte(_accelAddress, CTRL_REG1_A);
@@ -389,7 +389,7 @@ public:
     }
 
     void setMagDataRate(uint8_t rate) {
-        if (rate >= RATE_COUNT) return;
+        if (rate >= RATE_COUNT || rate == _magRate) return;
         _magRate = rate;
 
         uint8_t current = readByte(_magAddress, CRA_REG_M);
@@ -416,7 +416,7 @@ public:
     }
 
     void setMagPowerMode(uint8_t mode) {
-        if (mode > MAG_MODE_SLEEP) return;
+        if (mode > MAG_MODE_SLEEP || mode == _magPowerMode) return;
         _magPowerMode = mode;
 
         uint8_t regValue;

@@ -25,12 +25,12 @@ void loop() {
     sensor.readMag(magData);
     sensor.readAccel(accelData);
 
-    // Serial.print("aX = ");
-    // Serial.print(accelData.x);
-    // Serial.print(", aY = ");
-    // Serial.print(accelData.y);
-    // Serial.print(", aZ = ");
-    // Serial.println(accelData.z);
+    Serial.print("aX = ");
+    Serial.print(accelData.x);
+    Serial.print(", aY = ");
+    Serial.print(accelData.y);
+    Serial.print(", aZ = ");
+    Serial.println(accelData.z);
     Serial.print("mX = ");
     Serial.print(magData.x);
     Serial.print(", mY = ");
