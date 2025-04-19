@@ -1,0 +1,207 @@
+@startuml
+
+
+
+
+
+/' Objects '/
+
+class LSM303 {
+	+LSM303(bool magEnable, bool accelEnable, uint8_t accelAddr, uint8_t magAddr)
+	-_accelEnable : bool
+	-_magEnable : bool
+	+checkI2CCommunication() : bool
+	+defaultInit() : bool
+	-readByte(byte dev_addr, byte reg_addr) : byte
+	-_accelAddress : uint8_t
+	-_accelPowerMode : uint8_t
+	-_accelRate : uint8_t
+	-_accelScale : uint8_t
+	-_magAddress : uint8_t
+	-_magPowerMode : uint8_t
+	-_magRate : uint8_t
+	-_magScale : uint8_t
+	+disableAccel() : void
+	+disableMag() : void
+	+enableAccel() : void
+	+enableMag() : void
+	+processAccelData(fvec3& out, const i16vec3 in) : void
+	+processMagData(fvec3& out, const i16vec3 in) : void
+	+readAccel(fvec3& vec) : void
+	-readByteArray(byte dev_addr, byte reg_addr, byte* buf, byte count) : void
+	+readMag(fvec3& vec) : void
+	+readRawAccel(i16vec3& vec) : void
+	+readRawMag(i16vec3& vec) : void
+	+setAccelDataRate(uint8_t rate) : void
+	+setAccelPowerMode(uint8_t mode) : void
+	+setAccelScale(uint8_t newScale) : void
+	+setMagDataRate(uint8_t rate) : void
+	+setMagPowerMode(uint8_t mode) : void
+	+setMagScale(uint8_t newScale) : void
+	-writeByte(byte dev_addr, byte reg_addr, byte data) : void
+}
+
+
+enum AccelPowerMode {
+	ACCEL_MODE_LOW_POWER
+	ACCEL_MODE_NORMAL
+	ACCEL_MODE_POWERDOWN
+}
+
+
+enum AccelRegisters {
+	CLICK_CFG_A
+	CLICK_SRC_A
+	CLICK_THS_A
+	CTRL_REG1_A
+	CTRL_REG2_A
+	CTRL_REG3_A
+	CTRL_REG4_A
+	CTRL_REG5_A
+	CTRL_REG6_A
+	FIFO_CTRL_REG_A
+	FIFO_SRC_REG_A
+	INT1_CFG_A
+	INT1_DURATION_A
+	INT1_SRC_A
+	INT1_THS_A
+	INT2_CFG_A
+	INT2_DURATION_A
+	INT2_SRC_A
+	INT2_THS_A
+	OUT_X_H_A
+	OUT_X_L_A
+	OUT_Y_H_A
+	OUT_Y_L_A
+	OUT_Z_H_A
+	OUT_Z_L_A
+	REFERENCE_A
+	STATUS_REG_A
+	TIME_LATENCY_A
+	TIME_LIMIT_A
+	TIME_WINDOW_A
+}
+
+
+enum AccelScale {
+	ACCEL_SCALE_16G
+	ACCEL_SCALE_2G
+	ACCEL_SCALE_4G
+	ACCEL_SCALE_8G
+	ACCEL_SCALE_COUNT
+}
+
+
+enum AccelSensitivity {
+	ACCEL_SENSITIVITY_16G
+	ACCEL_SENSITIVITY_2G
+	ACCEL_SENSITIVITY_4G
+	ACCEL_SENSITIVITY_8G
+}
+
+
+enum DataRate {
+	RATE_0_75HZ
+	RATE_15HZ
+	RATE_1_5HZ
+	RATE_220HZ
+	RATE_30HZ
+	RATE_3HZ
+	RATE_75HZ
+	RATE_7_5HZ
+	RATE_COUNT
+}
+
+
+enum MagPowerMode {
+	MAG_MODE_CONTINUOUS
+	MAG_MODE_SINGLE
+	MAG_MODE_SLEEP
+}
+
+
+enum MagRegisters {
+	CRA_REG_M
+	CRB_REG_M
+	IRA_REG_M
+	IRB_REG_M
+	IRC_REG_M
+	MR_REG_M
+	OUT_X_H_M
+	OUT_X_L_M
+	OUT_Y_H_M
+	OUT_Y_L_M
+	OUT_Z_H_M
+	OUT_Z_L_M
+	SR_REG_M
+	TEMP_OUT_H_M
+	TEMP_OUT_L_M
+}
+
+
+enum MagScale {
+	MAG_SCALE_1_3
+	MAG_SCALE_1_9
+	MAG_SCALE_2_5
+	MAG_SCALE_4_0
+	MAG_SCALE_4_7
+	MAG_SCALE_5_6
+	MAG_SCALE_8_1
+}
+
+
+enum MagSensitivityXY {
+	MAG_SENSITIVITY_XY_1_3
+	MAG_SENSITIVITY_XY_1_9
+	MAG_SENSITIVITY_XY_2_5
+	MAG_SENSITIVITY_XY_4_0
+	MAG_SENSITIVITY_XY_4_7
+	MAG_SENSITIVITY_XY_5_6
+	MAG_SENSITIVITY_XY_8_1
+}
+
+
+enum MagSensitivityZ {
+	MAG_SENSITIVITY_Z_1_3
+	MAG_SENSITIVITY_Z_1_9
+	MAG_SENSITIVITY_Z_2_5
+	MAG_SENSITIVITY_Z_4_0
+	MAG_SENSITIVITY_Z_4_7
+	MAG_SENSITIVITY_Z_5_6
+	MAG_SENSITIVITY_Z_8_1
+}
+
+
+class fvec3 {
+	+x : float
+	+y : float
+	+z : float
+}
+
+
+class i16vec3 {
+	+x : int16_t
+	+y : int16_t
+	+z : int16_t
+}
+
+
+
+
+
+/' Inheritance relationships '/
+
+
+
+
+/' Aggregation relationships '/
+
+
+
+
+
+/' Nested objects '/
+
+
+
+@enduml

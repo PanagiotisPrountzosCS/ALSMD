@@ -144,25 +144,19 @@ public:
         _magRate = RATE_15HZ;
         _accelPowerMode = ACCEL_MODE_NORMAL;
         _magPowerMode = MAG_MODE_CONTINUOUS;
+        _accelScale = ACCEL_SCALE_16G;
+        _magScale = MAG_SCALE_8_1;
     }
 
     bool checkI2CCommunication() {
         // just confirm we can begin and end transmission to the i2c slaves
         Wire.beginTransmission(_accelAddress);
         byte accelStatus = Wire.endTransmission();
-        if (accelStatus != 0) {
-            Serial.print("Accel fail. Error code : ");
-            Serial.println(accelStatus);
-            return false;
-        }
+        if (accelStatus != 0) return false;
 
         Wire.beginTransmission(_magAddress);
         byte magStatus = Wire.endTransmission();
-        if (magStatus != 0) {
-            Serial.print("Mag fail. Error code : ");
-            Serial.println(magStatus);
-            return false;
-        }
+        if (magStatus != 0) return false;
 
         return true;
     }
@@ -172,16 +166,14 @@ public:
         if (!checkI2CCommunication()) return false;
 
         if (_accelEnable) {
-            _accelScale = ACCEL_SCALE_2G;
-            setAccelPowerMode(ACCEL_MODE_NORMAL);
-            setAccelDataRate(RATE_15HZ);
+            setAccelPowerMode(_accelPowerMode);
+            setAccelDataRate(_accelRate);
             setAccelScale(_accelScale);
         }
 
         if (_magEnable) {
-            _magScale = MAG_SCALE_8_1;
-            setMagPowerMode(MAG_MODE_CONTINUOUS);
-            setMagDataRate(RATE_15HZ);
+            setMagPowerMode(_magPowerMode);
+            setMagDataRate(_magRate);
             setMagScale(_magScale);
         }
         return true;
@@ -343,7 +335,7 @@ public:
     }
 
     void setAccelScale(uint8_t newScale) {
-        if (newScale != _accelScale && newScale < ACCEL_SCALE_COUNT)
+        if (newScale < ACCEL_SCALE_COUNT)
             _accelScale = newScale;
         else
             return;
@@ -361,7 +353,7 @@ public:
     }
 
     void setAccelPowerMode(uint8_t mode) {
-        if (mode > ACCEL_MODE_POWERDOWN || mode == _accelPowerMode) return;
+        if (mode > ACCEL_MODE_POWERDOWN) return;
         _accelPowerMode = mode;
 
         uint8_t current = readByte(_accelAddress, CTRL_REG1_A);
@@ -389,7 +381,7 @@ public:
     }
 
     void setMagDataRate(uint8_t rate) {
-        if (rate >= RATE_COUNT || rate == _magRate) return;
+        if (rate >= RATE_COUNT) return;
         _magRate = rate;
 
         uint8_t current = readByte(_magAddress, CRA_REG_M);
@@ -405,7 +397,7 @@ public:
     }
 
     void setMagScale(uint8_t newScale) {
-        if (newScale != _magScale && newScale <= 7)
+        if (newScale <= 7)
             _magScale = newScale;
         else
             return;
@@ -416,7 +408,7 @@ public:
     }
 
     void setMagPowerMode(uint8_t mode) {
-        if (mode > MAG_MODE_SLEEP || mode == _magPowerMode) return;
+        if (mode > MAG_MODE_SLEEP) return;
         _magPowerMode = mode;
 
         uint8_t regValue;
