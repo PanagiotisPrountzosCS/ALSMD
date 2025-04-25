@@ -433,7 +433,6 @@ public:
         writeByte(_magAddress, MR_REG_M, regValue);
     }
 
-private:
     void writeByte(byte dev_addr, byte reg_addr, byte data) {
         Wire.beginTransmission(dev_addr);
         Wire.write(reg_addr);
