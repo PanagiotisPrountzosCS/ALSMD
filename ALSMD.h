@@ -373,7 +373,7 @@ public:
 
             case ACCEL_MODE_POWERDOWN:
                 // Clear axes enable bits to power down
-                current &= ~0x07;  // Clear bits 0-2
+                current = 0x08;  // clear everything and set low power mode
                 break;
         }
 
@@ -459,6 +459,34 @@ public:
             buf[i] = Wire.read();
         }
     }
+
+    void statusDump() {
+        if (!Serial) return;
+        Serial.print("CTRL_REG1_A : ");
+        Serial.println(readByte(_accelAddress, CTRL_REG1_A));
+        Serial.print("CTRL_REG2_A : ");
+        Serial.println(readByte(_accelAddress, CTRL_REG2_A));
+        Serial.print("CTRL_REG3_A : ");
+        Serial.println(readByte(_accelAddress, CTRL_REG3_A));
+        Serial.print("CTRL_REG4_A : ");
+        Serial.println(readByte(_accelAddress, CTRL_REG4_A));
+        Serial.print("CTRL_REG5_A : ");
+        Serial.println(readByte(_accelAddress, CTRL_REG5_A));
+        Serial.print("CTRL_REG6_A : ");
+        Serial.println(readByte(_accelAddress, CTRL_REG6_A));
+        Serial.print("STATUS_REG_A : ");
+        Serial.println(readByte(_accelAddress, STATUS_REG_A));
+
+        Serial.print("CRA_REG_M : ");
+        Serial.println(readByte(_magAddress, CRA_REG_M));
+        Serial.print("CRB_REG_M : ");
+        Serial.println(readByte(_magAddress, CRB_REG_M));
+        Serial.print("MR_REG_M : ");
+        Serial.println(readByte(_magAddress, MR_REG_M));
+        Serial.print("SR_REG_M: ");
+        Serial.println(readByte(_magAddress, SR_REG_M));
+    }
+
     // I2C addresses
     uint8_t _accelAddress;
     uint8_t _magAddress;
