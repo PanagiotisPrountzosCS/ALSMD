@@ -11,16 +11,20 @@ fvec3 accelData;
 void setup() {
     Serial.begin(115200);
     Wire.begin();
-    if (!sensor.defaultInit()) {
+    sensor.configure(ACCEL_RATE_10HZ, MAG_RATE_0_75HZ, ACCEL_MODE_LOW_POWER, MAG_MODE_SINGLE,
+                     ACCEL_SCALE_2G, MAG_SCALE_8_1);
+    if (!sensor.init()) {
         Serial.println("Failed to initialize LSM303!");
         while (1) {
         }
     }
     Serial.println("LSM303 initialized successfully");
+
+    sensor.statusDump();
 }
 
 void loop() {
-    delay(50);
+    sleep(1);
 
     sensor.readMag(magData);
     sensor.readAccel(accelData);

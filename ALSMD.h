@@ -90,16 +90,30 @@ enum MagScale {
     MAG_SCALE_8_1       // ±8.1 gauss
 };
 
-enum DataRate {
-    RATE_0_75HZ = 0,
-    RATE_1_5HZ,
-    RATE_3HZ,
-    RATE_7_5HZ,
-    RATE_15HZ,
-    RATE_30HZ,
-    RATE_75HZ,
-    RATE_220HZ,
-    RATE_COUNT
+enum AccelDataRate {
+    ACCEL_RATE_0HZ = 0,
+    ACCEL_RATE_1HZ,
+    ACCEL_RATE_10HZ,
+    ACCEL_RATE_25HZ,
+    ACCEL_RATE_50HZ,
+    ACCEL_RATE_100HZ,
+    ACCEL_RATE_200HZ,
+    ACCEL_RATE_400HZ,
+    ACCEL_RATE_1620HZ,
+    ACCEL_RATE_5376HZ,
+    ACCEL_RATE_COUNT
+};
+
+enum MagDataRate {
+    MAG_RATE_0_75HZ = 0,
+    MAG_RATE_1_5HZ,
+    MAG_RATE_3HZ,
+    MAG_RATE_7_5HZ,
+    MAG_RATE_15HZ,
+    MAG_RATE_30HZ,
+    MAG_RATE_75HZ,
+    MAG_RATE_220HZ,
+    MAG_RATE_COUNT
 };
 
 enum AccelPowerMode { ACCEL_MODE_NORMAL = 0, ACCEL_MODE_LOW_POWER = 1, ACCEL_MODE_POWERDOWN = 2 };
@@ -140,12 +154,18 @@ public:
         _accelEnable = accelEnable;
         _accelAddress = accelAddr;
         _magAddress = magAddr;
-        _accelRate = RATE_15HZ;
-        _magRate = RATE_15HZ;
-        _accelPowerMode = ACCEL_MODE_NORMAL;
-        _magPowerMode = MAG_MODE_CONTINUOUS;
-        _accelScale = ACCEL_SCALE_16G;
-        _magScale = MAG_SCALE_8_1;
+    }
+
+    void configure(AccelDataRate accelRate = ACCEL_RATE_1HZ, MagDataRate magRate = MAG_RATE_0_75HZ,
+                   AccelPowerMode accelPowerMode = ACCEL_MODE_NORMAL,
+                   MagPowerMode magPowerMode = MAG_MODE_CONTINUOUS,
+                   AccelScale accelScale = ACCEL_SCALE_2G, MagScale magScale = MAG_SCALE_1_3) {
+        _accelRate = accelRate;
+        _magRate = magRate;
+        _accelPowerMode = accelPowerMode;
+        _magPowerMode = magPowerMode;
+        _accelScale = accelScale;
+        _magScale = magScale;
     }
 
     bool checkI2CCommunication() {
@@ -161,7 +181,7 @@ public:
         return true;
     }
 
-    bool defaultInit() {
+    bool init() {
         // confirm I2C communication
         if (!checkI2CCommunication()) return false;
 
@@ -169,12 +189,16 @@ public:
             setAccelPowerMode(_accelPowerMode);
             setAccelDataRate(_accelRate);
             setAccelScale(_accelScale);
+        } else {
+            setAccelPowerMode(ACCEL_MODE_POWERDOWN);
         }
 
         if (_magEnable) {
             setMagPowerMode(_magPowerMode);
             setMagDataRate(_magRate);
             setMagScale(_magScale);
+        } else {
+            setMagPowerMode(MAG_MODE_SLEEP);
         }
         return true;
     }
@@ -203,6 +227,13 @@ public:
 
     void readRawMag(i16vec3& vec) {
         if (!_magEnable) return;
+        // reading in single conversion mode sets mr_reg_m to 0x03, aka powerdown. We should reset
+        // it to 0x01, aka single conversion
+        if (_magPowerMode == MAG_MODE_SINGLE) {
+            setMagPowerMode(_magPowerMode);
+            delay(5);       // wait until new reading is ready
+            //this delay should NOT be fixed, but it seems to work well
+        }
         uint8_t buffer[6];
 
         readByteArray(_magAddress, OUT_X_H_M, buffer, 6);
@@ -314,7 +345,7 @@ public:
     }
 
     void setAccelDataRate(uint8_t rate) {
-        if (rate >= RATE_COUNT) return;
+        if (rate >= ACCEL_RATE_COUNT) return;
         _accelRate = rate;
 
         // Read current register value to preserve other bits
@@ -381,7 +412,7 @@ public:
     }
 
     void setMagDataRate(uint8_t rate) {
-        if (rate >= RATE_COUNT) return;
+        if (rate >= MAG_RATE_COUNT) return;
         _magRate = rate;
 
         uint8_t current = readByte(_magAddress, CRA_REG_M);
@@ -411,26 +442,7 @@ public:
         if (mode > MAG_MODE_SLEEP) return;
         _magPowerMode = mode;
 
-        uint8_t regValue;
-
-        switch (mode) {
-            case MAG_MODE_CONTINUOUS:
-                regValue = 0x00;
-                break;
-
-            case MAG_MODE_SINGLE:
-                regValue = 0x01;
-                break;
-
-            case MAG_MODE_SLEEP:
-                regValue = 0x02;
-                break;
-
-            default:
-                return;
-        }
-
-        writeByte(_magAddress, MR_REG_M, regValue);
+        writeByte(_magAddress, MR_REG_M, mode);
     }
 
     void writeByte(byte dev_addr, byte reg_addr, byte data) {
