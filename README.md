@@ -1,4 +1,4 @@
-###ALSMD
+### ALSMD
 
 ALSMD(Another LSM Driver) is a simple, header-only driver for the LSM303 sensor family.
 
